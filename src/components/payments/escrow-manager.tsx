@@ -140,6 +140,7 @@ export function EscrowManager({ escrows }: EscrowManagerProps) {
                       {payment.status === "FUNDED" && (
                         <>
                           <button
+                            type="button"
                             onClick={() =>
                               handleAction(payment.id, "release")
                             }
@@ -149,6 +150,7 @@ export function EscrowManager({ escrows }: EscrowManagerProps) {
                             Release
                           </button>
                           <button
+                            type="button"
                             onClick={() =>
                               handleAction(payment.id, "refund")
                             }

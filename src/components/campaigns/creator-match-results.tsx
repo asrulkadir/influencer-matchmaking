@@ -62,6 +62,7 @@ export function CreatorMatchResults({
           </p>
         </div>
         <button
+          type="button"
           onClick={runMatching}
           disabled={loading}
           className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
@@ -157,10 +158,10 @@ export function CreatorMatchResults({
 
               {/* Actions */}
               <div className="flex flex-col gap-2">
-                <button className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-primary/90">
+                <button type="button" className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-primary/90">
                   Invite
                 </button>
-                <button className="rounded-lg border px-4 py-2 text-xs font-medium hover:bg-gray-50">
+                <button type="button" className="rounded-lg border px-4 py-2 text-xs font-medium hover:bg-gray-50">
                   View Profile
                 </button>
               </div>
