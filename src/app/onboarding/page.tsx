@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, Suspense } from "react";
+import { useId, useState, Suspense } from "react";
 
 function OnboardingContent() {
   const { data: session, update } = useSession();
@@ -14,6 +14,7 @@ function OnboardingContent() {
   const [role, setRole] = useState<"brand" | "creator">(roleFromUrl ?? "brand");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formId = useId();
 
   // Brand fields
   const [companyName, setCompanyName] = useState("");
@@ -145,11 +146,11 @@ function OnboardingContent() {
 
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="companyName" className="block text-sm font-medium">
+                  <label htmlFor={`${formId}-companyName`} className="block text-sm font-medium">
                     Company Name *
                   </label>
                   <input
-                    id="companyName"
+                    id={`${formId}-companyName`}
                     type="text"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
@@ -159,11 +160,11 @@ function OnboardingContent() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="website" className="block text-sm font-medium">
+                  <label htmlFor={`${formId}-website`} className="block text-sm font-medium">
                     Website
                   </label>
                   <input
-                    id="website"
+                    id={`${formId}-website`}
                     type="url"
                     value={website}
                     onChange={(e) => setWebsite(e.target.value)}
@@ -172,11 +173,11 @@ function OnboardingContent() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="industry" className="block text-sm font-medium">
+                  <label htmlFor={`${formId}-industry`} className="block text-sm font-medium">
                     Industry
                   </label>
                   <select
-                    id="industry"
+                    id={`${formId}-industry`}
                     value={industry}
                     onChange={(e) => setIndustry(e.target.value)}
                     className="mt-1 w-full rounded-lg border px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -233,11 +234,11 @@ function OnboardingContent() {
 
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="displayName" className="block text-sm font-medium">
+                  <label htmlFor={`${formId}-displayName`} className="block text-sm font-medium">
                     Display Name *
                   </label>
                   <input
-                    id="displayName"
+                    id={`${formId}-displayName`}
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
@@ -247,11 +248,11 @@ function OnboardingContent() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="bio" className="block text-sm font-medium">
+                  <label htmlFor={`${formId}-bio`} className="block text-sm font-medium">
                     Bio
                   </label>
                   <textarea
-                    id="bio"
+                    id={`${formId}-bio`}
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
                     placeholder="Tell brands about your content style and audience..."
@@ -261,7 +262,7 @@ function OnboardingContent() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="tiktokHandle" className="block text-sm font-medium">
+                    <label htmlFor={`${formId}-tiktokHandle`} className="block text-sm font-medium">
                       TikTok Handle
                     </label>
                     <div className="relative mt-1">
@@ -269,7 +270,7 @@ function OnboardingContent() {
                         @
                       </span>
                       <input
-                        id="tiktokHandle"
+                        id={`${formId}-tiktokHandle`}
                         type="text"
                         value={tiktokHandle}
                         onChange={(e) => setTiktokHandle(e.target.value)}
@@ -279,7 +280,7 @@ function OnboardingContent() {
                     </div>
                   </div>
                   <div>
-                    <label htmlFor="instagramHandle" className="block text-sm font-medium">
+                    <label htmlFor={`${formId}-instagramHandle`} className="block text-sm font-medium">
                       Instagram Handle
                     </label>
                     <div className="relative mt-1">
@@ -287,7 +288,7 @@ function OnboardingContent() {
                         @
                       </span>
                       <input
-                        id="instagramHandle"
+                        id={`${formId}-instagramHandle`}
                         type="text"
                         value={instagramHandle}
                         onChange={(e) => setInstagramHandle(e.target.value)}

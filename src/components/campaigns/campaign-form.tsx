@@ -22,7 +22,7 @@ export function CampaignForm({ nicheTags }: CampaignFormProps) {
     endDate: "",
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: { preventDefault: () => void; }) => {
     e.preventDefault();
     setLoading(true);
 
@@ -32,19 +32,23 @@ export function CampaignForm({ nicheTags }: CampaignFormProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          budget: parseFloat(formData.budget),
+          budget: Number.parseFloat(formData.budget),
           budgetPerCreator: formData.budgetPerCreator
-            ? parseFloat(formData.budgetPerCreator)
+            ? Number.parseFloat(formData.budgetPerCreator)
             : undefined,
           targetFollowers: formData.targetFollowers
-            ? parseInt(formData.targetFollowers)
+            ? Number.parseInt(formData.targetFollowers)
             : undefined,
           targetEngagement: formData.targetEngagement
-            ? parseFloat(formData.targetEngagement)
+            ? Number.parseFloat(formData.targetEngagement)
             : undefined,
-          maxCreators: parseInt(formData.maxCreators),
-          startDate: formData.startDate || undefined,
-          endDate: formData.endDate || undefined,
+          maxCreators: Number.parseInt(formData.maxCreators),
+          startDate: formData.startDate
+            ? new Date(formData.startDate).toISOString()
+            : undefined,
+          endDate: formData.endDate
+            ? new Date(formData.endDate).toISOString()
+            : undefined,
         }),
       });
 
@@ -55,7 +59,7 @@ export function CampaignForm({ nicheTags }: CampaignFormProps) {
       }
 
       const data = await response.json();
-      window.location.href = `/dashboard/brand/campaigns/${data.campaign.id}`;
+      globalThis.location.href = `/dashboard/brand/campaigns/${data.campaign.id}`;
     } catch {
       alert("Something went wrong");
     } finally {

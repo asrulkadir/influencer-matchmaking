@@ -1,1 +1,1 @@
-export { supabase, createServiceClient } from "./supabase";
+export { supabase } from "./supabase";

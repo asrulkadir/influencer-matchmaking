@@ -1,8 +1,16 @@
 "use client";
 
+import { signOut } from "next-auth/react";
+import type { BrandProfile, Campaign, CampaignStatus } from "@/lib/database.types";
+
+type CampaignSummary = Pick<Campaign, "id" | "title" | "budget"> & {
+  status: CampaignStatus;
+  campaignCreators: unknown[];
+};
+
 interface BrandDashboardProps {
-  brand: any;
-  campaigns: any[];
+  brand: BrandProfile;
+  campaigns: CampaignSummary[];
   stats: {
     activeCampaigns: number;
     totalCreators: number;
@@ -71,6 +79,15 @@ export function BrandDashboard({
             </a>
           )}
         </div>
+        <div className="absolute bottom-28 left-4 right-4">
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/" })}
+            className="w-full rounded-lg px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
+          >
+            Sign Out
+          </button>
+        </div>
       </aside>
 
       {/* Main Content */}
@@ -129,7 +146,7 @@ export function BrandDashboard({
                 <div>
                   <h3 className="font-medium">{campaign.title}</h3>
                   <p className="text-sm text-muted-foreground">
-                    {campaign._count.campaignCreators} creators ·{" "}
+                    {campaign.campaignCreators.length} creators ·{" "}
                     ${Number(campaign.budget).toLocaleString()} budget
                   </p>
                 </div>

@@ -58,7 +58,7 @@ async function handleSubscriptionDeleted(event: Stripe.CustomerSubscriptionDelet
   await supabase
     .from("BrandProfile")
     .update({
-      subscriptionTier: "STARTER",
+      subscriptionTier: "FREE",
       stripeSubscriptionId: null,
     })
     .eq("stripeCustomerId", customerId);

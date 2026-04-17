@@ -94,11 +94,11 @@ export default function HomePage() {
         <p className="mt-4 text-center text-muted-foreground">
           Choose the plan that scales with your brand
         </p>
-        <div className="mt-16 grid gap-8 md:grid-cols-3">
+        <div className="mt-16 grid gap-8 md:grid-cols-4">
           {plans.map((plan) => (
             <div
               key={plan.name}
-              className={`rounded-2xl border p-8 ${
+              className={`flex flex-col rounded-2xl border p-8 ${
                 plan.popular
                   ? "border-primary bg-white shadow-lg ring-2 ring-primary"
                   : "bg-white shadow-sm"
@@ -114,7 +114,7 @@ export default function HomePage() {
                 <span className="text-4xl font-bold">${plan.price}</span>
                 <span className="text-muted-foreground">/month</span>
               </div>
-              <ul className="mt-8 space-y-3">
+              <ul className="mt-8 mb-4 space-y-3">
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-center gap-2 text-sm">
                     <span className="text-green-500">✓</span>
@@ -124,7 +124,7 @@ export default function HomePage() {
               </ul>
               <Link
                 href={`/auth/signin?plan=${plan.name.toLowerCase()}`}
-                className={`mt-8 block rounded-lg px-6 py-3 text-center text-sm font-semibold ${
+                className={`mt-auto block rounded-lg px-6 py-3 text-center text-sm font-semibold ${
                   plan.popular
                     ? "bg-primary text-white hover:bg-primary/90"
                     : "border border-primary text-primary hover:bg-primary/5"
@@ -187,6 +187,17 @@ const features = [
 ];
 
 const plans = [
+    {
+    name: "Free",
+    price: 0,
+    popular: false,
+    features: [
+      "1 campaign/month",
+      "5 creator outreach",
+      "Basic matching algorithm",
+      "Escrow payments",
+    ],
+  },
   {
     name: "Starter",
     price: 49,

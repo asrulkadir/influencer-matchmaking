@@ -1,5 +1,7 @@
 "use client";
 
+import { signOut } from "next-auth/react";
+
 interface CreatorDashboardProps {
   creator: any;
   campaigns: any[];
@@ -81,6 +83,13 @@ export function CreatorDashboard({
               </p>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/" })}
+            className="mt-2 w-full rounded-lg px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
+          >
+            Sign Out
+          </button>
         </div>
       </aside>
 
@@ -146,7 +155,7 @@ export function CreatorDashboard({
               <div>
                 <p className="text-sm text-muted-foreground">Niche Tags</p>
                 <div className="mt-1 flex flex-wrap gap-1">
-                  {creator.nicheTags.map((nt: any) => (
+                  {(creator.nicheTags ?? []).map((nt: any) => (
                     <span
                       key={nt.nicheTag.id}
                       className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700"

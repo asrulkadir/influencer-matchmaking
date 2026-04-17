@@ -37,10 +37,12 @@ export async function POST(request: NextRequest) {
     const userRole: UserRole = validated.role;
 
     // Update the user's role
-    await supabase
+    const { error: roleError } = await supabase
       .from("User")
       .update({ role: userRole })
       .eq("id", session.user.id);
+
+    if (roleError) throw roleError;
 
     if (validated.role === "BRAND") {
       // Check if profile already exists
@@ -59,7 +61,7 @@ export async function POST(request: NextRequest) {
         companyName: validated.companyName,
         website: validated.website || null,
         industry: validated.industry || null,
-        subscriptionTier: "STARTER",
+        subscriptionTier: "FREE",
         campaignsUsed: 0,
         outreachUsed: 0,
       });

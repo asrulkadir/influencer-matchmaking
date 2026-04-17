@@ -21,6 +21,55 @@ const actionSchema = z.object({
 });
 
 /**
+ * GET /api/payments/escrow — List escrow payments for the current brand.
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const user = await requireRole(["BRAND", "ADMIN"]);
+
+    const { data: brand } = await supabase
+      .from("BrandProfile")
+      .select("id")
+      .eq("userId", user.id)
+      .single();
+
+    if (!brand) {
+      return NextResponse.json(
+        { error: "Brand profile not found" },
+        { status: 404 }
+      );
+    }
+
+    const { data: escrows } = await supabase
+      .from("EscrowPayment")
+      .select(
+        "*, campaignCreator:CampaignCreator!inner(id, campaignId, creatorId, campaign:Campaign!inner(title, brandId), creator:CreatorProfile(displayName))"
+      )
+      .eq("campaignCreator.campaign.brandId", brand.id)
+      .order("createdAt", { ascending: false });
+
+    const items = (escrows ?? []).map((e) => ({
+      id: e.id,
+      campaignCreatorId: e.campaignCreator?.id,
+      creatorName: e.campaignCreator?.creator?.displayName ?? "Unknown",
+      campaignTitle: e.campaignCreator?.campaign?.title ?? "Unknown",
+      amount: Number(e.amount),
+      creatorPayout: Number(e.creatorPayout),
+      platformFee: Number(e.platformFee),
+      status: e.status,
+      fundedAt: e.fundedAt,
+      releasedAt: e.releasedAt,
+    }));
+
+    return NextResponse.json({ escrows: items });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
  * POST /api/payments/escrow — Create a new escrow payment.
  */
 export async function POST(request: NextRequest) {

@@ -7,7 +7,7 @@
 
 export type UserRole = "BRAND" | "CREATOR" | "ADMIN";
 
-export type SubscriptionTier = "STARTER" | "GROWTH" | "ENTERPRISE";
+export type SubscriptionTier = "FREE" | "STARTER" | "GROWTH" | "ENTERPRISE";
 
 export type CampaignStatus =
   | "DRAFT"
@@ -200,7 +200,7 @@ export type SubscriptionPlan = {
   id: string;
   tier: SubscriptionTier;
   name: string;
-  stripePriceId: string;
+  stripePriceId: string | null;
   monthlyPrice: number;
   campaignLimit: number;
   outreachLimit: number;
@@ -421,7 +421,7 @@ export type Database = {
       };
       SubscriptionPlan: {
         Row: SubscriptionPlan;
-        Insert: Partial<SubscriptionPlan> & Pick<SubscriptionPlan, "tier" | "name" | "stripePriceId" | "monthlyPrice" | "campaignLimit" | "outreachLimit">;
+        Insert: Partial<SubscriptionPlan> & Pick<SubscriptionPlan, "tier" | "name" | "monthlyPrice" | "campaignLimit" | "outreachLimit">;
         Update: Partial<SubscriptionPlan>;
         Relationships: [];
       };
