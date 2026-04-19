@@ -21,6 +21,18 @@ const creatorSchema = z.object({
 
 const onboardingSchema = z.discriminatedUnion("role", [brandSchema, creatorSchema]);
 
+const profileUpdateSchema = z.object({
+  displayName: z.string().min(1).max(100),
+  bio: z.string().max(500).optional().nullable(),
+  contentRate: z.number().positive().optional().nullable(),
+  tiktokHandle: z.string().max(100).optional().nullable(),
+  instagramHandle: z.string().max(100).optional().nullable(),
+  tiktokFollowers: z.number().int().min(0).optional(),
+  tiktokEngagement: z.number().min(0).optional(),
+  instagramFollowers: z.number().int().min(0).optional(),
+  instagramEngagement: z.number().min(0).optional(),
+});
+
 /**
  * POST /api/onboarding — Complete user onboarding by creating a profile.
  */
@@ -99,6 +111,77 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true }, { status: 201 });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Validation failed", details: error.issues },
+        { status: 400 }
+      );
+    }
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * PUT /api/onboarding — Update an existing creator profile.
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const validated = profileUpdateSchema.parse(body);
+
+    const { data: creator } = await supabase
+      .from("CreatorProfile")
+      .select("id")
+      .eq("userId", session.user.id)
+      .single();
+
+    if (!creator) {
+      return NextResponse.json(
+        { error: "Creator profile not found" },
+        { status: 404 }
+      );
+    }
+
+    const tiktokFollowers = validated.tiktokFollowers ?? 0;
+    const instagramFollowers = validated.instagramFollowers ?? 0;
+    const tiktokEngagement = validated.tiktokEngagement ?? 0;
+    const instagramEngagement = validated.instagramEngagement ?? 0;
+    const totalFollowers = tiktokFollowers + instagramFollowers;
+    const avgEngagement =
+      tiktokFollowers + instagramFollowers > 0
+        ? (tiktokEngagement * tiktokFollowers +
+            instagramEngagement * instagramFollowers) /
+          (tiktokFollowers + instagramFollowers)
+        : 0;
+
+    const { error } = await supabase
+      .from("CreatorProfile")
+      .update({
+        displayName: validated.displayName,
+        bio: validated.bio ?? null,
+        contentRate: validated.contentRate ?? null,
+        tiktokHandle: validated.tiktokHandle ?? null,
+        instagramHandle: validated.instagramHandle ?? null,
+        tiktokFollowers,
+        tiktokEngagement,
+        instagramFollowers,
+        instagramEngagement,
+        totalFollowers,
+        avgEngagement: Math.round(avgEngagement * 100) / 100,
+      })
+      .eq("id", creator.id);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

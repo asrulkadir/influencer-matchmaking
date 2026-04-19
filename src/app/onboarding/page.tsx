@@ -10,8 +10,7 @@ function OnboardingContent() {
   const searchParams = useSearchParams();
 
   const roleFromUrl = searchParams.get("role") as "brand" | "creator" | null;
-  const [step, setStep] = useState(1);
-  const [role, setRole] = useState<"brand" | "creator">(roleFromUrl ?? "brand");
+  const role = roleFromUrl === "brand" ? "brand" : "creator";
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formId = useId();
@@ -59,77 +58,8 @@ function OnboardingContent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-50 via-white to-pink-50 px-4">
       <div className="w-full max-w-lg">
-        {/* Progress */}
-        <div className="mb-8 flex items-center justify-center gap-2">
-          {[1, 2].map((s) => (
-            <div
-              key={s}
-              className={`h-2 w-16 rounded-full transition-colors ${
-                s <= step ? "bg-primary" : "bg-gray-200"
-              }`}
-            />
-          ))}
-        </div>
 
-        <div className="rounded-2xl border bg-white p-8 shadow-sm">
-          {step === 1 && (
-            <div className="space-y-6">
-              <div>
-                <h1 className="text-2xl font-bold">Welcome to CreatorMatch!</h1>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Tell us about yourself to get started
-                </p>
-              </div>
-
-              <div>
-                <label className="mb-3 block text-sm font-medium">
-                  I want to join as a...
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setRole("brand")}
-                    className={`rounded-xl border-2 p-5 text-left transition-all ${
-                      role === "brand"
-                        ? "border-primary bg-primary/5"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <span className="text-3xl">🏢</span>
-                    <p className="mt-2 font-semibold">Brand</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Run influencer campaigns
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRole("creator")}
-                    className={`rounded-xl border-2 p-5 text-left transition-all ${
-                      role === "creator"
-                        ? "border-primary bg-primary/5"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <span className="text-3xl">🎨</span>
-                    <p className="mt-2 font-semibold">Creator</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Monetize your audience
-                    </p>
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="w-full rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-white hover:bg-primary/90"
-              >
-                Continue
-              </button>
-            </div>
-          )}
-
-          {step === 2 && role === "brand" && (
+          {role === "brand" && (
             <div className="space-y-6">
               <div>
                 <h1 className="text-2xl font-bold">Set up your brand profile</h1>
@@ -200,13 +130,6 @@ function OnboardingContent() {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setStep(1)}
-                  className="rounded-lg border px-6 py-3 text-sm font-medium hover:bg-gray-50"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
                   onClick={handleSubmit}
                   disabled={isSubmitting || !companyName}
                   className="flex-1 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
@@ -217,7 +140,7 @@ function OnboardingContent() {
             </div>
           )}
 
-          {step === 2 && role === "creator" && (
+          {role === "creator" && (
             <div className="space-y-6">
               <div>
                 <h1 className="text-2xl font-bold">Set up your creator profile</h1>
@@ -303,13 +226,6 @@ function OnboardingContent() {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setStep(1)}
-                  className="rounded-lg border px-6 py-3 text-sm font-medium hover:bg-gray-50"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
                   onClick={handleSubmit}
                   disabled={isSubmitting || !displayName}
                   className="flex-1 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
@@ -321,7 +237,6 @@ function OnboardingContent() {
           )}
         </div>
       </div>
-    </div>
   );
 }
 

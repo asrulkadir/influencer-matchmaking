@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 
 const creatorNav = [
@@ -13,6 +14,12 @@ const creatorNav = [
   { label: "Profile", href: "/dashboard/creator/profile" },
 ];
 
+interface SocialStats {
+  followers: number;
+  engagement: number;
+  found: boolean;
+}
+
 export function CreatorProfileClient({
   creator,
   allNicheTags,
@@ -20,6 +27,7 @@ export function CreatorProfileClient({
   creator: any;
   allNicheTags: Array<{ id: string; name: string }>;
 }) {
+  const searchParams = useSearchParams();
   const [displayName, setDisplayName] = useState(creator.displayName ?? "");
   const [bio, setBio] = useState(creator.bio ?? "");
   const [contentRate, setContentRate] = useState(
@@ -31,30 +39,221 @@ export function CreatorProfileClient({
   const [instagramHandle, setInstagramHandle] = useState(
     creator.instagramHandle ?? ""
   );
+  const [tiktokStats, setTiktokStats] = useState<SocialStats | null>(null);
+  const [instagramStats, setInstagramStats] = useState<SocialStats | null>(
+    null
+  );
+  const [lookingUpTiktok, setLookingUpTiktok] = useState(false);
+  const [lookingUpInstagram, setLookingUpInstagram] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  // Stripe Connect state
+  const [stripeLoading, setStripeLoading] = useState(false);
+  const [stripeStatus, setStripeStatus] = useState<{
+    connected: boolean;
+    onboardingComplete: boolean;
+  }>({
+    connected: !!creator.stripeAccountId,
+    onboardingComplete: creator.onboardingComplete ?? false,
+  });
+
   const formId = useId();
+  const tiktokTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const instagramTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Check Stripe status on mount and after returning from Stripe onboarding
+  useEffect(() => {
+    const stripeParam = searchParams.get("stripe");
+    if (stripeParam === "complete" || creator.stripeAccountId) {
+      fetch("/api/creators/stripe-connect")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.connected !== undefined) {
+            setStripeStatus({
+              connected: data.connected,
+              onboardingComplete: data.onboardingComplete,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [searchParams, creator.stripeAccountId]);
+
+  // Social media lookup function
+  const lookupSocial = useCallback(
+    async (platform: "tiktok" | "instagram", username: string) => {
+      const cleanUsername = username.replace(/^@/, "").trim();
+      if (!cleanUsername) {
+        if (platform === "tiktok") setTiktokStats(null);
+        else setInstagramStats(null);
+        return;
+      }
+
+      if (platform === "tiktok") setLookingUpTiktok(true);
+      else setLookingUpInstagram(true);
+
+      try {
+        const res = await fetch("/api/creators/social-lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ platform, username: cleanUsername }),
+        });
+
+        if (res.ok) {
+          const stats: SocialStats = await res.json();
+          if (platform === "tiktok") setTiktokStats(stats);
+          else setInstagramStats(stats);
+        }
+      } catch {
+        // Silently fail — user can still save manually
+      } finally {
+        if (platform === "tiktok") setLookingUpTiktok(false);
+        else setLookingUpInstagram(false);
+      }
+    },
+    []
+  );
+
+  // Debounced auto-lookup for TikTok
+  const handleTiktokChange = (value: string) => {
+    setTiktokHandle(value);
+    setTiktokStats(null);
+    if (tiktokTimerRef.current) clearTimeout(tiktokTimerRef.current);
+    tiktokTimerRef.current = setTimeout(() => {
+      if (value.trim()) lookupSocial("tiktok", value);
+    }, 800);
+  };
+
+  // Debounced auto-lookup for Instagram
+  const handleInstagramChange = (value: string) => {
+    setInstagramHandle(value);
+    setInstagramStats(null);
+    if (instagramTimerRef.current) clearTimeout(instagramTimerRef.current);
+    instagramTimerRef.current = setTimeout(() => {
+      if (value.trim()) lookupSocial("instagram", value);
+    }, 800);
+  };
+
+  // Stripe Connect onboarding
+  async function handleStripeSetup() {
+    setStripeLoading(true);
+    try {
+      const res = await fetch("/api/creators/stripe-connect", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setMessage(data.error ?? "Failed to start Stripe setup");
+      }
+    } catch {
+      setMessage("Failed to connect to Stripe");
+    } finally {
+      setStripeLoading(false);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
     setMessage("");
     try {
+      // If handles changed but we don't have fresh stats, lookup now before saving
+      let finalTiktokStats = tiktokStats;
+      let finalInstagramStats = instagramStats;
+
+      const tiktokChanged =
+        (tiktokHandle || "") !== (creator.tiktokHandle || "");
+      const instagramChanged =
+        (instagramHandle || "") !== (creator.instagramHandle || "");
+
+      if (tiktokChanged && tiktokHandle && !tiktokStats?.found) {
+        setMessage("Looking up TikTok profile...");
+        try {
+          const res = await fetch("/api/creators/social-lookup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              platform: "tiktok",
+              username: tiktokHandle.replace(/^@/, "").trim(),
+            }),
+          });
+          if (res.ok) {
+            finalTiktokStats = await res.json();
+            setTiktokStats(finalTiktokStats);
+          }
+        } catch {
+          // continue with old data
+        }
+      }
+
+      if (instagramChanged && instagramHandle && !instagramStats?.found) {
+        setMessage("Looking up Instagram profile...");
+        try {
+          const res = await fetch("/api/creators/social-lookup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              platform: "instagram",
+              username: instagramHandle.replace(/^@/, "").trim(),
+            }),
+          });
+          if (res.ok) {
+            finalInstagramStats = await res.json();
+            setInstagramStats(finalInstagramStats);
+          }
+        } catch {
+          // continue with old data
+        }
+      }
+
+      setMessage("Saving profile...");
+
+      let savedTiktokFollowers = creator.tiktokFollowers ?? 0;
+      let savedTiktokEngagement = creator.tiktokEngagement ?? 0;
+      let savedInstagramFollowers = creator.instagramFollowers ?? 0;
+      let savedInstagramEngagement = creator.instagramEngagement ?? 0;
+
+      if (finalTiktokStats?.found) {
+        savedTiktokFollowers = finalTiktokStats.followers;
+        savedTiktokEngagement = finalTiktokStats.engagement;
+      } else if (tiktokChanged) {
+        savedTiktokFollowers = 0;
+        savedTiktokEngagement = 0;
+      }
+
+      if (finalInstagramStats?.found) {
+        savedInstagramFollowers = finalInstagramStats.followers;
+        savedInstagramEngagement = finalInstagramStats.engagement;
+      } else if (instagramChanged) {
+        savedInstagramFollowers = 0;
+        savedInstagramEngagement = 0;
+      }
+
       const res = await fetch("/api/onboarding", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           displayName,
           bio,
-          contentRate: contentRate ? parseFloat(contentRate) : null,
+          contentRate: contentRate ? Number.parseFloat(contentRate) : null,
           tiktokHandle: tiktokHandle || null,
           instagramHandle: instagramHandle || null,
+          tiktokFollowers: savedTiktokFollowers,
+          tiktokEngagement: savedTiktokEngagement,
+          instagramFollowers: savedInstagramFollowers,
+          instagramEngagement: savedInstagramEngagement,
         }),
       });
       if (res.ok) {
         setMessage("Profile updated successfully!");
       } else {
-        setMessage("Failed to update profile.");
+        const data = await res.json();
+        setMessage(data.error ?? "Failed to update profile.");
       }
+    } catch {
+      setMessage("Something went wrong");
     } finally {
       setSaving(false);
     }
@@ -125,6 +324,9 @@ export function CreatorProfileClient({
         <div className="space-y-6">
           <div className="rounded-xl border bg-white p-6">
             <h2 className="text-lg font-semibold">Social Media Accounts</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Enter your handles and we&apos;ll automatically detect your follower count
+            </p>
             <div className="mt-6 space-y-4">
               <div>
                 <label htmlFor={`${formId}-tiktokHandle`} className="block text-sm font-medium">
@@ -138,13 +340,33 @@ export function CreatorProfileClient({
                     id={`${formId}-tiktokHandle`}
                     type="text"
                     value={tiktokHandle}
-                    onChange={(e) => setTiktokHandle(e.target.value)}
+                    onChange={(e) => handleTiktokChange(e.target.value)}
+                    placeholder="username"
                     className="w-full rounded-lg border py-2.5 pl-8 pr-4 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
-                {creator.tiktokFollowers > 0 && (
+                {lookingUpTiktok && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-blue-600">
+                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                    Looking up TikTok profile...
+                  </p>
+                )}
+                {tiktokStats?.found && (
+                  <div className="mt-1 rounded-md bg-green-50 px-3 py-1.5 text-xs text-green-700">
+                    Found: {tiktokStats.followers.toLocaleString()} followers
+                    {tiktokStats.engagement > 0 && (
+                      <> &middot; {tiktokStats.engagement}% engagement</>
+                    )}
+                  </div>
+                )}
+                {tiktokStats && !tiktokStats.found && (
+                  <p className="mt-1 text-xs text-orange-600">
+                    Username not found. Check the handle and try again.
+                  </p>
+                )}
+                {!tiktokStats && !lookingUpTiktok && creator.tiktokFollowers > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {creator.tiktokFollowers.toLocaleString()} followers
+                    Current: {creator.tiktokFollowers.toLocaleString()} followers
                   </p>
                 )}
               </div>
@@ -160,13 +382,33 @@ export function CreatorProfileClient({
                     id={`${formId}-instagramHandle`}
                     type="text"
                     value={instagramHandle}
-                    onChange={(e) => setInstagramHandle(e.target.value)}
+                    onChange={(e) => handleInstagramChange(e.target.value)}
+                    placeholder="username"
                     className="w-full rounded-lg border py-2.5 pl-8 pr-4 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
-                {creator.instagramFollowers > 0 && (
+                {lookingUpInstagram && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-blue-600">
+                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                    Looking up Instagram profile...
+                  </p>
+                )}
+                {instagramStats?.found && (
+                  <div className="mt-1 rounded-md bg-green-50 px-3 py-1.5 text-xs text-green-700">
+                    Found: {instagramStats.followers.toLocaleString()} followers
+                    {instagramStats.engagement > 0 && (
+                      <> &middot; {instagramStats.engagement}% engagement</>
+                    )}
+                  </div>
+                )}
+                {instagramStats && !instagramStats.found && (
+                  <p className="mt-1 text-xs text-orange-600">
+                    Username not found. Check the handle and try again.
+                  </p>
+                )}
+                {!instagramStats && !lookingUpInstagram && creator.instagramFollowers > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {creator.instagramFollowers.toLocaleString()} followers
+                    Current: {creator.instagramFollowers.toLocaleString()} followers
                   </p>
                 )}
               </div>
@@ -196,25 +438,51 @@ export function CreatorProfileClient({
           {/* Stripe Status */}
           <div className="rounded-xl border bg-white p-6">
             <h2 className="text-lg font-semibold">Payout Settings</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Connect Stripe to receive payments when brands approve your content
+            </p>
             <div className="mt-4">
-              {creator.stripeConnectId && creator.onboardingComplete ? (
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-green-400" />
-                  <span className="text-sm font-medium text-green-700">
-                    Stripe Connected — Ready for payouts
-                  </span>
+              {stripeStatus.connected && stripeStatus.onboardingComplete ? (
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-green-400" />
+                    <span className="text-sm font-medium text-green-700">
+                      Stripe Connected — Ready for payouts
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    When a brand approves your submitted content, your earnings
+                    will be automatically transferred to your connected Stripe
+                    account.
+                  </p>
                 </div>
               ) : (
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full bg-orange-400" />
                     <span className="text-sm font-medium text-orange-700">
-                      Stripe setup incomplete
+                      {stripeStatus.connected
+                        ? "Stripe setup incomplete"
+                        : "Stripe not connected"}
                     </span>
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Complete your Stripe onboarding to receive campaign payouts.
+                    Connect your Stripe account to receive campaign payouts when
+                    brands approve your content. Funds are held in escrow and
+                    released to you automatically.
                   </p>
+                  <button
+                    type="button"
+                    onClick={handleStripeSetup}
+                    disabled={stripeLoading}
+                    className="mt-4 rounded-lg bg-[#635bff] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#5349e0] disabled:opacity-50"
+                  >
+                    {stripeLoading
+                      ? "Connecting..."
+                      : stripeStatus.connected
+                        ? "Complete Stripe Setup"
+                        : "Connect with Stripe"}
+                  </button>
                 </div>
               )}
             </div>
