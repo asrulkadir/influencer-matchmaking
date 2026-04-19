@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 
 const creatorNav = [
@@ -45,9 +46,10 @@ export function CreatorCampaignsClient({ campaigns }: { campaigns: any[] }) {
       ) : (
         <div className="space-y-4">
           {campaigns.map((cc) => (
-            <div
+            <Link
               key={cc.id}
-              className="rounded-xl border bg-white p-6 transition hover:shadow-md"
+              href={`/dashboard/creator/campaigns/${cc.campaign?.id ?? cc.campaignId}`}
+              className="block rounded-xl border bg-white p-6 transition hover:shadow-md"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -100,7 +102,16 @@ export function CreatorCampaignsClient({ campaigns }: { campaigns: any[] }) {
                   </p>
                 </div>
               </div>
-            </div>
+              {["ACCEPTED", "REVISION_REQUESTED"].includes(cc.status) && (
+                <div className="mt-3 text-right">
+                  <span className="text-xs font-medium text-primary">
+                    {cc.status === "REVISION_REQUESTED"
+                      ? "Resubmit content →"
+                      : "Submit content →"}
+                  </span>
+                </div>
+              )}
+            </Link>
           ))}
         </div>
       )}

@@ -156,7 +156,6 @@ export function CampaignForm({ nicheTags }: CampaignFormProps) {
             </label>
             <input
               type="number"
-              min="50"
               step="0.01"
               className="mt-1 w-full rounded-lg border px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               placeholder="500"

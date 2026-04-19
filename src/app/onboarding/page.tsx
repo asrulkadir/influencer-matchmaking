@@ -2,7 +2,15 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useId, useState, Suspense } from "react";
+import { useId, useState, useEffect, Suspense } from "react";
+
+const ROLE_COOKIE_RE = /(?:^|;\s*)onboarding-role=(brand|creator)/;
+
+function getRoleFromCookie(): "brand" | "creator" | null {
+  if (typeof document === "undefined") return null;
+  const match = ROLE_COOKIE_RE.exec(document.cookie);
+  return match ? (match[1] as "brand" | "creator") : null;
+}
 
 function OnboardingContent() {
   const { data: session, update } = useSession();
@@ -10,7 +18,9 @@ function OnboardingContent() {
   const searchParams = useSearchParams();
 
   const roleFromUrl = searchParams.get("role") as "brand" | "creator" | null;
-  const role = roleFromUrl === "brand" ? "brand" : "creator";
+
+  // Null until mounted so we don't flash the wrong form before reading the cookie
+  const [role, setRole] = useState<"brand" | "creator" | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formId = useId();
@@ -25,6 +35,18 @@ function OnboardingContent() {
   const [bio, setBio] = useState("");
   const [tiktokHandle, setTiktokHandle] = useState("");
   const [instagramHandle, setInstagramHandle] = useState("");
+
+  useEffect(() => {
+    setRole(roleFromUrl ?? getRoleFromCookie() ?? "creator");
+  }, [roleFromUrl]);
+
+  if (!role) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -47,6 +69,8 @@ function OnboardingContent() {
       }
 
       await update();
+      // Clear the onboarding role cookie
+      document.cookie = "onboarding-role=;path=/;max-age=0";
       router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

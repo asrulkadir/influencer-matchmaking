@@ -24,14 +24,40 @@ interface MatchResult {
 interface CreatorMatchResultsProps {
   campaignId: string;
   initialMatches?: MatchResult[];
+  onInvite?: () => void;
 }
 
 export function CreatorMatchResults({
   campaignId,
   initialMatches,
+  onInvite,
 }: CreatorMatchResultsProps) {
   const [matches, setMatches] = useState<MatchResult[]>(initialMatches ?? []);
   const [loading, setLoading] = useState(false);
+  const [inviting, setInviting] = useState<string | null>(null);
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
+
+  const handleInvite = async (creatorId: string) => {
+    setInviting(creatorId);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creatorId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error ?? "Failed to invite creator");
+        return;
+      }
+      setInvitedIds((prev) => new Set(prev).add(creatorId));
+      onInvite?.();
+    } catch {
+      alert("Something went wrong");
+    } finally {
+      setInviting(null);
+    }
+  };
 
   const runMatching = async () => {
     setLoading(true);
@@ -158,8 +184,20 @@ export function CreatorMatchResults({
 
               {/* Actions */}
               <div className="flex flex-col gap-2">
-                <button type="button" className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-primary/90">
-                  Invite
+                <button
+                  type="button"
+                  disabled={
+                    inviting === match.creatorId ||
+                    invitedIds.has(match.creatorId)
+                  }
+                  onClick={() => handleInvite(match.creatorId)}
+                  className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {invitedIds.has(match.creatorId)
+                    ? "Invited ✓"
+                    : inviting === match.creatorId
+                      ? "Inviting…"
+                      : "Invite"}
                 </button>
                 <button type="button" className="rounded-lg border px-4 py-2 text-xs font-medium hover:bg-gray-50">
                   View Profile

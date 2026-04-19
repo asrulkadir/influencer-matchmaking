@@ -54,10 +54,16 @@ export function DashboardLayout({
         </nav>
         <div className="border-t p-4">
           {footer}
+          <Link
+            href="/auth/signin"
+            className="mt-2 block w-full rounded-lg px-4 py-2.5 text-left text-sm text-muted-foreground hover:bg-gray-100"
+          >
+            Switch Role
+          </Link>
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: "/" })}
-            className="mt-2 w-full rounded-lg px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
+            className="mt-1 w-full rounded-lg px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
           >
             Sign Out
           </button>

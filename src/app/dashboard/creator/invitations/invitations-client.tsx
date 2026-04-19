@@ -21,22 +21,29 @@ export function CreatorInvitationsClient({
   const [invitations, setInvitations] = useState(initialInvitations);
   const [loading, setLoading] = useState<string | null>(null);
 
-  async function handleRespond(campaignCreatorId: string, accept: boolean) {
-    setLoading(campaignCreatorId);
+  async function handleRespond(invitation: any, accept: boolean) {
+    const campaignId = invitation.campaign?.id ?? invitation.campaignId;
+    if (!campaignId) {
+      alert("Missing campaign ID");
+      return;
+    }
+    setLoading(invitation.id);
     try {
-      const res = await fetch("/api/campaigns", {
+      const res = await fetch(`/api/campaigns/${campaignId}/invite`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          campaignCreatorId,
-          status: accept ? "ACCEPTED" : "REJECTED",
-        }),
+        body: JSON.stringify({ action: accept ? "accept" : "reject" }),
       });
-      if (res.ok) {
-        setInvitations((prev) =>
-          prev.filter((inv) => inv.id !== campaignCreatorId)
-        );
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error ?? "Failed to respond to invitation");
+        return;
       }
+      setInvitations((prev) =>
+        prev.filter((inv) => inv.id !== invitation.id)
+      );
+    } catch {
+      alert("Something went wrong");
     } finally {
       setLoading(null);
     }
@@ -119,7 +126,7 @@ export function CreatorInvitationsClient({
                 <button
                   type="button"
                   disabled={loading === inv.id}
-                  onClick={() => handleRespond(inv.id, true)}
+                  onClick={() => handleRespond(inv, true)}
                   className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
                 >
                   Accept
@@ -127,7 +134,7 @@ export function CreatorInvitationsClient({
                 <button
                   type="button"
                   disabled={loading === inv.id}
-                  onClick={() => handleRespond(inv.id, false)}
+                  onClick={() => handleRespond(inv, false)}
                   className="rounded-lg border px-6 py-2.5 text-sm font-medium text-muted-foreground hover:bg-gray-50 disabled:opacity-50"
                 >
                   Decline

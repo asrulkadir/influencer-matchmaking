@@ -32,9 +32,9 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    if (campaign.status !== "DRAFT") {
+    if (!["DRAFT", "ACTIVE", "MATCHING"].includes(campaign.status)) {
       return NextResponse.json(
-        { error: "Can only run matching on DRAFT campaigns" },
+        { error: "Can only run matching on DRAFT, ACTIVE or MATCHING campaigns" },
         { status: 400 }
       );
     }

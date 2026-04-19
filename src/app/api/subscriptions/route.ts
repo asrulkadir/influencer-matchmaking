@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     if (!plan) {
       return NextResponse.json(
-        { error: "Subscription plan not found. Run `pnpm db:seed` to populate plans." },
+        { error: "Subscription plan not found" },
         { status: 404 }
       );
     }

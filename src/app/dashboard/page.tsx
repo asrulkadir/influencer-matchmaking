@@ -3,12 +3,31 @@ import { supabase } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { BrandDashboard } from "@/components/dashboard/brand-dashboard";
 import { CreatorDashboard } from "@/components/dashboard/creator-dashboard";
+import { RoleSwitcher } from "@/components/dashboard/role-switcher";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const session = await getSession();
 
   if (!session?.user) {
     redirect("/auth/signin");
+  }
+
+  const params = await searchParams;
+  const requestedRole =
+    typeof params.role === "string" ? params.role : undefined;
+
+  // If the caller asked for a different role, hand off to the client-side
+  // RoleSwitcher which will update the DB + refresh the JWT, then redirect
+  // back here without the query-param.
+  if (
+    requestedRole &&
+    requestedRole.toUpperCase() !== session.user.role
+  ) {
+    return <RoleSwitcher role={requestedRole} />;
   }
 
   if (session.user.role === "BRAND") {
@@ -18,7 +37,7 @@ export default async function DashboardPage() {
       .eq("userId", session.user.id)
       .single();
 
-    if (!brand) redirect("/onboarding");
+    if (!brand) redirect("/onboarding?role=brand");
 
     const { data: campaigns } = await supabase
       .from("Campaign")
@@ -74,7 +93,7 @@ export default async function DashboardPage() {
       .eq("userId", session.user.id)
       .single();
 
-    if (!creator) redirect("/onboarding");
+    if (!creator) redirect("/onboarding?role=creator");
 
     const activeCampaigns = (creator.campaignCreators ?? []).filter(
       (cc: { status: string }) =>
