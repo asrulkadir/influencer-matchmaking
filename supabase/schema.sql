@@ -155,6 +155,8 @@ CREATE TABLE IF NOT EXISTS "Campaign" (
   "targetFollowers"  INTEGER,
   "targetEngagement" NUMERIC(5,2),
   "maxCreators"      INTEGER          NOT NULL DEFAULT 5,
+  "escrowedBudget"   NUMERIC(12,2)    NOT NULL DEFAULT 0,
+  "fundedAt"         TIMESTAMPTZ,
   "createdAt"        TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
   "updatedAt"        TIMESTAMPTZ      NOT NULL DEFAULT NOW()
 );
@@ -201,6 +203,98 @@ CREATE TABLE IF NOT EXISTS "EscrowPayment" (
   "createdAt"             TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
   "updatedAt"             TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
+
+-- ─── CampaignFundingLog (audit trail) ────────────────────────
+CREATE TABLE IF NOT EXISTS "CampaignFundingLog" (
+  "id"             TEXT           NOT NULL DEFAULT gen_random_uuid()::text PRIMARY KEY,
+  "campaignId"     TEXT           NOT NULL REFERENCES "Campaign"("id") ON DELETE CASCADE,
+  "action"         TEXT           NOT NULL,
+  "amount"         NUMERIC(12,2) NOT NULL,
+  "balanceBefore"  NUMERIC(12,2) NOT NULL,
+  "balanceAfter"   NUMERIC(12,2) NOT NULL,
+  "metadata"       JSONB,
+  "createdAt"      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+-- ─── Atomic Escrow Functions ─────────────────────────────────
+
+-- Allocate budget for a creator escrow (atomically locks campaign row)
+CREATE OR REPLACE FUNCTION allocate_campaign_escrow(
+  p_campaign_id TEXT,
+  p_campaign_creator_id TEXT,
+  p_amount NUMERIC,
+  p_platform_fee NUMERIC,
+  p_creator_payout NUMERIC
+) RETURNS JSONB AS $$
+DECLARE
+  v_budget NUMERIC;
+  v_escrowed NUMERIC;
+  v_new_escrowed NUMERIC;
+  v_escrow_id TEXT;
+BEGIN
+  SELECT budget, "escrowedBudget" INTO v_budget, v_escrowed
+  FROM "Campaign" WHERE id = p_campaign_id FOR UPDATE;
+
+  IF v_budget IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Campaign not found');
+  END IF;
+
+  v_new_escrowed := v_escrowed + p_amount;
+
+  IF v_new_escrowed > v_budget THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Insufficient campaign budget',
+      'budget', v_budget, 'escrowed', v_escrowed, 'requested', p_amount, 'remaining', v_budget - v_escrowed);
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM "EscrowPayment" WHERE "campaignCreatorId" = p_campaign_creator_id) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Escrow already exists for this creator');
+  END IF;
+
+  UPDATE "Campaign" SET "escrowedBudget" = v_new_escrowed, "updatedAt" = NOW() WHERE id = p_campaign_id;
+
+  INSERT INTO "EscrowPayment" ("campaignCreatorId", amount, "platformFee", "creatorPayout", currency, status, "fundedAt")
+  VALUES (p_campaign_creator_id, p_amount, p_platform_fee, p_creator_payout, 'usd', 'FUNDED', NOW())
+  RETURNING id INTO v_escrow_id;
+
+  INSERT INTO "CampaignFundingLog" ("campaignId", action, amount, "balanceBefore", "balanceAfter", metadata)
+  VALUES (p_campaign_id, 'ALLOCATED', p_amount, v_budget - v_escrowed, v_budget - v_new_escrowed,
+    jsonb_build_object('campaignCreatorId', p_campaign_creator_id, 'escrowId', v_escrow_id,
+      'platformFee', p_platform_fee, 'creatorPayout', p_creator_payout));
+
+  RETURN jsonb_build_object('success', true, 'escrowId', v_escrow_id, 'budgetRemaining', v_budget - v_new_escrowed);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Deallocate budget (rejection/refund)
+CREATE OR REPLACE FUNCTION deallocate_campaign_escrow(
+  p_campaign_id TEXT,
+  p_campaign_creator_id TEXT,
+  p_amount NUMERIC,
+  p_reason TEXT
+) RETURNS JSONB AS $$
+DECLARE
+  v_budget NUMERIC;
+  v_escrowed NUMERIC;
+  v_new_escrowed NUMERIC;
+BEGIN
+  SELECT budget, "escrowedBudget" INTO v_budget, v_escrowed
+  FROM "Campaign" WHERE id = p_campaign_id FOR UPDATE;
+
+  IF v_budget IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Campaign not found');
+  END IF;
+
+  v_new_escrowed := GREATEST(v_escrowed - p_amount, 0);
+
+  UPDATE "Campaign" SET "escrowedBudget" = v_new_escrowed, "updatedAt" = NOW() WHERE id = p_campaign_id;
+
+  INSERT INTO "CampaignFundingLog" ("campaignId", action, amount, "balanceBefore", "balanceAfter", metadata)
+  VALUES (p_campaign_id, 'DEALLOCATED', p_amount, v_budget - v_escrowed, v_budget - v_new_escrowed,
+    jsonb_build_object('campaignCreatorId', p_campaign_creator_id, 'reason', p_reason));
+
+  RETURN jsonb_build_object('success', true, 'budgetRemaining', v_budget - v_new_escrowed);
+END;
+$$ LANGUAGE plpgsql;
 
 -- ─── SubscriptionPlan ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "SubscriptionPlan" (
@@ -264,6 +358,7 @@ ALTER TABLE "Campaign"         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "CampaignNicheTag" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "CampaignCreator"  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "EscrowPayment"    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "CampaignFundingLog" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "SubscriptionPlan" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "AnalyticsReport"  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Notification"     ENABLE ROW LEVEL SECURITY;
@@ -282,6 +377,7 @@ CREATE POLICY "service_role_all" ON "Campaign"         FOR ALL TO service_role U
 CREATE POLICY "service_role_all" ON "CampaignNicheTag" FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all" ON "CampaignCreator"  FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all" ON "EscrowPayment"    FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_all" ON "CampaignFundingLog" FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all" ON "SubscriptionPlan" FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all" ON "AnalyticsReport"  FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all" ON "Notification"     FOR ALL TO service_role USING (true) WITH CHECK (true);

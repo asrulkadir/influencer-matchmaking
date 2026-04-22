@@ -87,6 +87,20 @@ export async function POST(
       campaign.budgetPerCreator ??
       Math.floor((Number(campaign.budget) / campaign.maxCreators) * 100) / 100;
 
+    // Budget remaining check — prevent inviting more creators than budget allows
+    const budgetRemaining =
+      Number(campaign.budget) - Number(campaign.escrowedBudget ?? 0);
+    if (budgetPerCreator > budgetRemaining) {
+      return NextResponse.json(
+        {
+          error: `Insufficient campaign budget. Remaining: $${budgetRemaining.toFixed(2)}, required per creator: $${budgetPerCreator.toFixed(2)}.`,
+          budgetRemaining,
+          budgetPerCreator,
+        },
+        { status: 400 }
+      );
+    }
+
     const { data: invitation, error } = await supabase
       .from("CampaignCreator")
       .insert({
@@ -183,7 +197,7 @@ export async function PATCH(
 
     if (error) throw error;
 
-    // If accepted, create escrow payment for this creator
+    // If accepted, create escrow payment atomically via Postgres function
     if (action === "accept") {
       const campaign = invitation.campaign as any;
       // Calculate amount from agreedRate, or fallback to campaign budget
@@ -215,25 +229,39 @@ export async function PATCH(
       const platformFee = Math.round(amount * platformFeePercent) / 100;
       const creatorPayout = amount - platformFee;
 
-      const { error: escrowErr } = await supabase
-        .from("EscrowPayment")
-        .insert({
-          campaignCreatorId: invitation.id,
-          amount,
-          platformFee,
-          creatorPayout,
-          currency: "usd",
-          status: "FUNDED",
-          fundedAt: new Date().toISOString(),
-        });
+      // Atomic allocation — locks campaign row, checks budget, creates escrow, logs audit
+      const { data: allocResult, error: rpcErr } = await supabase.rpc(
+        "allocate_campaign_escrow",
+        {
+          p_campaign_id: campaignId,
+          p_campaign_creator_id: invitation.id,
+          p_amount: amount,
+          p_platform_fee: platformFee,
+          p_creator_payout: creatorPayout,
+        }
+      );
 
-      if (escrowErr) {
+      const result = allocResult as Record<string, unknown> | null;
+
+      if (rpcErr) {
         // Rollback: revert CampaignCreator back to INVITED
         await supabase
           .from("CampaignCreator")
           .update({ status: "INVITED", updatedAt: new Date().toISOString() })
           .eq("id", invitation.id);
-        throw new Error(`Failed to create escrow: ${escrowErr.message}`);
+        throw new Error(`Escrow allocation failed: ${rpcErr.message}`);
+      }
+
+      if (!result?.success) {
+        // Rollback: revert CampaignCreator back to INVITED
+        await supabase
+          .from("CampaignCreator")
+          .update({ status: "INVITED", updatedAt: new Date().toISOString() })
+          .eq("id", invitation.id);
+        return NextResponse.json(
+          { error: (result?.error as string) || "Budget allocation failed" },
+          { status: 400 }
+        );
       }
     }
 

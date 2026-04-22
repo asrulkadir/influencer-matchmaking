@@ -10,7 +10,7 @@ const submitContentSchema = z.object({
 
 const reviewSchema = z.object({
   campaignCreatorId: z.string().min(1),
-  action: z.enum(["approve", "request_revision"]),
+  action: z.enum(["approve", "request_revision", "reject"]),
   brandFeedback: z.string().max(2000).optional(),
 });
 
@@ -216,9 +216,16 @@ export async function PATCH(
       );
     }
 
-    if (cc.status !== "CONTENT_SUBMITTED") {
+    if (cc.status !== "CONTENT_SUBMITTED" && action !== "reject") {
       return NextResponse.json(
         { error: `Cannot review content in "${cc.status}" status` },
+        { status: 400 }
+      );
+    }
+
+    if (action === "reject" && !["CONTENT_SUBMITTED", "ACCEPTED", "REVISION_REQUESTED"].includes(cc.status)) {
+      return NextResponse.json(
+        { error: `Cannot reject creator in "${cc.status}" status` },
         { status: 400 }
       );
     }
@@ -227,7 +234,7 @@ export async function PATCH(
       // 1. Find escrow first — must exist and be FUNDED to proceed
       const { data: escrow, error: escrowFetchErr } = await supabase
         .from("EscrowPayment")
-        .select("id, status")
+        .select("id, status, amount")
         .eq("campaignCreatorId", cc.id)
         .single();
 
@@ -261,6 +268,20 @@ export async function PATCH(
           { status: 500 }
         );
       }
+
+      // 2b. Audit log: escrow released
+      await supabase.from("CampaignFundingLog").insert({
+        campaignId,
+        action: "RELEASED",
+        amount: Number(escrow.amount),
+        balanceBefore: Number(campaign.budget) - Number(campaign.escrowedBudget ?? 0),
+        balanceAfter: Number(campaign.budget) - Number(campaign.escrowedBudget ?? 0),
+        metadata: {
+          campaignCreatorId: cc.id,
+          escrowId: escrow.id,
+          creatorName: cc.creator?.displayName,
+        },
+      });
 
       // 3. Mark CampaignCreator as PAID (skip APPROVED intermediate state)
       const { data: updated, error: updateErr } = await supabase
@@ -311,6 +332,58 @@ export async function PATCH(
       return NextResponse.json({
         campaignCreator: updated,
       });
+    } else if (action === "reject") {
+      // Reject the creator — refund escrow if it exists, deallocate budget
+      const { data: escrow } = await supabase
+        .from("EscrowPayment")
+        .select("id, status, amount")
+        .eq("campaignCreatorId", cc.id)
+        .single();
+
+      if (escrow && escrow.status === "FUNDED") {
+        // Refund the escrow
+        await supabase
+          .from("EscrowPayment")
+          .update({
+            status: "REFUNDED",
+            updatedAt: new Date().toISOString(),
+          })
+          .eq("id", escrow.id);
+
+        // Atomic deallocation — returns budget to pool and logs audit trail
+        await supabase.rpc("deallocate_campaign_escrow", {
+          p_campaign_id: campaignId,
+          p_campaign_creator_id: cc.id,
+          p_amount: Number(escrow.amount),
+          p_reason: brandFeedback || "Creator rejected by brand",
+        });
+      }
+
+      const { data: updated, error: updateErr } = await supabase
+        .from("CampaignCreator")
+        .update({
+          status: "REJECTED",
+          brandFeedback: brandFeedback ?? null,
+          updatedAt: new Date().toISOString(),
+        })
+        .eq("id", cc.id)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
+
+      // Notify creator
+      if (cc.creator?.userId) {
+        await supabase.from("Notification").insert({
+          userId: cc.creator.userId,
+          title: "Removed from Campaign",
+          message: `You have been removed from "${campaign.title}". ${brandFeedback ? `Reason: ${brandFeedback}` : ""}`,
+          type: "creator_rejected",
+          metadata: { campaignId, campaignCreatorId: cc.id },
+        });
+      }
+
+      return NextResponse.json({ campaignCreator: updated });
     } else {
       // Request revision
       const { data: updated, error: updateErr } = await supabase

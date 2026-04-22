@@ -5,10 +5,9 @@ import { supabase } from "@/lib/db";
 /**
  * POST /api/campaigns/[id]/publish
  *
- * Move a DRAFT campaign to ACTIVE after the brand confirms budget escrow.
- * In a production flow the brand would pay via Stripe first; here we
- * record the campaign-level escrow hold so funds are committed before
- * the campaign becomes visible to creators.
+ * Move a DRAFT campaign to ACTIVE.
+ * Locks the campaign budget (marks fundedAt) so the funds are committed.
+ * In production, this would also charge the brand via Stripe PaymentIntent.
  */
 export async function POST(
   request: NextRequest,
@@ -54,23 +53,38 @@ export async function POST(
       );
     }
 
-    // --- Payment / Escrow step ---
+    // --- Fund Locking ---
     // In production: create a Stripe PaymentIntent for the total budget,
-    // charge the brand, and hold funds in platform escrow.
-    // For now we validate budget > 0 and transition to ACTIVE.
-    // The per-creator escrow will be created when a creator accepts.
+    // charge the brand's payment method, and hold funds on the platform.
+    // For now: mark fundedAt to indicate funds are committed, and log it.
+    const now = new Date().toISOString();
 
     const { data: updated, error } = await supabase
       .from("Campaign")
       .update({
         status: "ACTIVE",
-        updatedAt: new Date().toISOString(),
+        fundedAt: now,
+        updatedAt: now,
       })
       .eq("id", campaignId)
       .select()
       .single();
 
     if (error) throw error;
+
+    // Audit log: campaign funded
+    await supabase.from("CampaignFundingLog").insert({
+      campaignId,
+      action: "FUNDED",
+      amount: Number(campaign.budget),
+      balanceBefore: 0,
+      balanceAfter: Number(campaign.budget),
+      metadata: {
+        brandId: campaign.brandId,
+        brandName: campaign.brand.companyName,
+        status: "ACTIVE",
+      },
+    });
 
     return NextResponse.json({ campaign: updated });
   } catch (error) {

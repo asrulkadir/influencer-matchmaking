@@ -154,6 +154,8 @@ export type Campaign = {
   targetFollowers: number | null;
   targetEngagement: number | null;
   maxCreators: number;
+  escrowedBudget: number;
+  fundedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -237,6 +239,17 @@ export type Notification = {
   message: string;
   type: string;
   read: boolean;
+  metadata: Json | null;
+  createdAt: string;
+};
+
+export type CampaignFundingLog = {
+  id: string;
+  campaignId: string;
+  action: string;
+  amount: number;
+  balanceBefore: number;
+  balanceAfter: number;
   metadata: Json | null;
   createdAt: string;
 };
@@ -453,12 +466,44 @@ export type Database = {
           },
         ];
       };
+      CampaignFundingLog: {
+        Row: CampaignFundingLog;
+        Insert: Partial<CampaignFundingLog> & Pick<CampaignFundingLog, "campaignId" | "action" | "amount" | "balanceBefore" | "balanceAfter">;
+        Update: Partial<CampaignFundingLog>;
+        Relationships: [
+          {
+            foreignKeyName: "CampaignFundingLog_campaignId_fkey";
+            columns: ["campaignId"];
+            isOneToOne: false;
+            referencedRelation: "Campaign";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      allocate_campaign_escrow: {
+        Args: {
+          p_campaign_id: string;
+          p_campaign_creator_id: string;
+          p_amount: number;
+          p_platform_fee: number;
+          p_creator_payout: number;
+        };
+        Returns: Json;
+      };
+      deallocate_campaign_escrow: {
+        Args: {
+          p_campaign_id: string;
+          p_campaign_creator_id: string;
+          p_amount: number;
+          p_reason: string;
+        };
+        Returns: Json;
+      };
     };
     Enums: {
       UserRole: UserRole;
